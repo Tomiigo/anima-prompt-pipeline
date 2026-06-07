@@ -1,0 +1,14 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.npy
+
+# 取得・生成するデータ(コミットしない)。プレースホルダだけ残す。
+anima_pipeline/data/raw/*
+!anima_pipeline/data/raw/README.md
+anima_pipeline/data/dict/*
+!anima_pipeline/data/dict/.gitkeep
+anima_pipeline/data/dict_artist/
+anima_pipeline/data/dict_char/

@@ -1,0 +1,43 @@
+# Gemma に見せる「お手本」集です。
+# 実際のリクエストの前に、ここの例を Gemma に見せ、同じ形でタグの行と(必要なら)英文を
+# 書かせます。すると Gemma は、お手本の「形」と「並び順」をまねて答えます。
+#
+# 1 つの例は、3 つのラベルでできています。
+#   DESCRIPTION : Gemma に渡す英語の説明文(あなたの日本語プロンプトを訳したものがここに入る)。
+#   TAGS        : Gemma に出してほしいタグの行(カンマ区切り)。並び順は anima_rules.txt の
+#                 TAG ORDER のとおり: 品質/メタ/レーティング → 人数(+相互作用) →
+#                 キャラ名・作品名・@アーティスト → 容姿(髪→目→表情→服→小物) →
+#                 ポーズ → カメラ → 背景/時間/天気 → ライティング/効果。
+#   NATURAL     : 任意。場面が複雑なときだけ「英文 1 文」。空でよい。代名詞(she/he/they)は使ってよい。
+#
+# 例と例の間は --- (ダッシュ 3 つだけの行)で区切ります。「#」で始まる行はメモで、無視されます。
+# 書き方の詳細は prompts/README.md を見てください。
+
+DESCRIPTION: A brown-haired girl in a sailor school uniform standing by a window in a classroom in the afternoon.
+TAGS: masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, safe, 1girl, solo, brown hair, long hair, blue eyes, serafuku, standing, classroom, indoors, window, afternoon, sunlight
+NATURAL:
+
+---
+
+DESCRIPTION: Two girls sitting together on a park bench, one with red hair and green eyes, the other with silver hair and blue eyes.
+TAGS: masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, safe, 2girls, multiple girls, sitting, red hair, green eyes, silver hair, blue eyes, park, bench, outdoors, tree, day
+NATURAL:
+The girl on the left has red hair and green eyes, while the one on the right has silver hair and blue eyes.
+
+---
+
+DESCRIPTION: An illustration by kantoku: a brown-haired girl in a sailor school uniform standing by a classroom window in the afternoon.
+TAGS: masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, safe, 1girl, solo, @kantoku, brown hair, blue eyes, serafuku, standing, classroom, indoors, window, afternoon, soft lighting
+NATURAL:
+
+---
+
+DESCRIPTION: Hatsune Miku singing on a brightly lit concert stage at night.
+TAGS: masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, safe, 1girl, solo, hatsune miku, vocaloid, twintails, aqua hair, very long hair, aqua eyes, open mouth, holding microphone, singing, stage, concert, night, stage lights, glowing
+NATURAL:
+
+---
+
+DESCRIPTION: A white-haired woman with deep crimson eyes wearing a kimono and holding a katana, standing in a quiet garden.
+TAGS: masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic, safe, 1girl, solo, white hair, hime cut, red eyes, serious, kimono, holding sword, katana, standing, garden, outdoors, day, dappled sunlight
+NATURAL:

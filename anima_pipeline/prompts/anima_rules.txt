@@ -1,0 +1,87 @@
+# Anima prompt rules.
+# Task: turn an English scene description into an Anima image-generation prompt.
+# Anima is a Danbooru/Gelbooru-tag-based anime model. Define WHAT to draw, then HOW.
+#
+# CREDIT: The tag-ordering structure below (quality/rating -> person count & interaction
+# -> per character, top to bottom incl. clothes -> posing -> camera & background ->
+# lighting/effects -> negatives) is based on Crody's prompting guide
+# "Crody's Illustrious / NoobAI Image Generation Tips"
+# (https://civitai.com/articles/19107 , author: https://civitai.com/user/Crody),
+# adapted here for Anima. Anima-specific points (Qwen3-0.6B text encoder, naming a
+# character then its series, the natural-language supplement) follow the Anima model
+# card by CircleStone Labs (https://huggingface.co/circlestone-labs/Anima).
+
+## TAG ORDER  (the most important rule)
+Build the prompt in this fixed order. Skip any block that does not apply.
+Do NOT print the block names or numbers — they are only labels here.
+
+1. quality / meta / rating
+2. person count, then interaction  (interaction only if more than one subject)
+3. PER CHARACTER  (repeat this whole block, once per character, top to bottom):
+     character name, series name, @artist  (only if explicitly requested)
+     skin / ears / horns / halo / wings
+     hair color, hair length, hair style
+     eye color, eye shape, pupils
+     expression
+     body features
+     headwear / eyewear, neckwear
+     upper clothes, lower clothes, legwear, shoes
+     accessories / tail / wings
+4. pose, hand position, leg position, action
+5. camera distance, camera angle, lens, focus, composition
+6. background, time, weather, scene objects
+7. lighting, depth, effects, after details
+8. (optional) ONE short natural-language sentence — only when the scene is complex
+
+## SYNTAX
+- Lowercase tags. Exceptions: score tags (score_9, score_8, score_7) and names that need capitals.
+- Separate tags with commas. Never use line breaks.
+- Use spaces, not underscores:  "looking at viewer", not "looking_at_viewer".
+- Artist tags start with "@":  "@artist name".
+- Use weights sparingly: (tag:1.2) to (tag:1.4), only for a tag that is very important.
+
+## BLOCK 1 — QUALITY / META / RATING
+Start with:
+  masterpiece, best quality, score_9, score_8, score_7, year 2025, newest, highres, absurdres, very aesthetic
+Then ONE rating tag, near the start: safe / sensitive / nsfw / explicit.
+  safe = normal illustration; sensitive = light fanservice / exposed skin;
+  nsfw = adult-oriented; explicit = stronger adult-oriented.
+Era tags (newest, recent, mid, early, old, year 2025, year 2024) set the time feeling.
+"newest" is the usual choice; use a year tag for a specific modern or retro look.
+
+## BLOCK 2 — PERSON COUNT / INTERACTION
+- One subject:  "1girl, solo"  /  "1boy, solo, male focus"  /  "1other, solo".
+- Multiple:  "2girls, duo"  /  "2boys"  /  "1girl and 1boy".
+- Put the interaction right after the count:
+    "2girls, duo, holding hands",  "1girl and 1boy, walking together".
+- With multiple characters, give EACH character its own full top-to-bottom block (block 3).
+  Separate appearance blocks keep multiple characters stable.
+
+## BLOCK 3 — CHARACTER / BODY / OUTFIT  (strictly top to bottom)
+- Order: hair, then eyes, then expression, then clothing upper -> lower -> shoes -> accessories.
+- Describe outfits by structure, material, and decoration when you can:
+    not "white dress"
+    but "white flowy maxi dress with layered chiffon skirt, delicate lace trim, gathered bust".
+- Break expressions into parts: eyes, eyebrows, mouth, emotion, blush / sweat / tears.
+  Do not mix contradictory emotions.
+
+## BLOCK 4 — POSE / HANDS
+- Give each hand a clear, separate job so one hand does not do two things:
+    "left hand holding a plate, right hand making a v sign beside her face, both arms clearly visible".
+
+## BLOCKS 5-7 — CAMERA / BACKGROUND / LIGHTING
+- Camera: shot size, camera position, camera angle, lens, focus, composition
+    e.g. "upper body portrait, from below, dutch angle, dynamic diagonal composition".
+- Background: add time, weather, objects, atmosphere, and depth — not just a place name.
+    e.g. "beach, beach waves, orange sky, sparkling sea surface, wet sand, palm trees, sunset haze".
+- Put lighting and effects near the end:
+    e.g. "backlighting, rim light, lens flare, depth of field, volumetric lighting".
+
+## BLOCK 8 — NATURAL LANGUAGE  (optional)
+- Only for complex scenes. ONE short sentence describing subject, pose, background, and atmosphere.
+- Pronouns (she / he / they / her / his) are allowed here. Keep it specific, not vague.
+
+## DO NOT
+- Do not invent character names or artist names. If a specific character or artist is wanted,
+  it is added from the user's own words — you only describe appearance with ordinary tags.
+- Do not output any explanation, reasoning, or markdown. Output only the prompt.
