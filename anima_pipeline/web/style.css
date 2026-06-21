@@ -701,3 +701,221 @@ code.empty {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
+/* History Panel Custom Styles */
+.history-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-height: 500px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.btn-action {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--border-radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.btn-action:hover {
+    background: rgba(139, 92, 246, 0.2);
+    border-color: var(--color-primary-light);
+    color: var(--color-primary-light);
+}
+
+.btn-action i {
+    width: 16px;
+    height: 16px;
+}
+
+.history-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding-right: 4px;
+}
+
+/* スクロールバーのカスタマイズ */
+.history-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.history-list::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.3);
+}
+
+.no-history {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 2rem 0;
+    text-align: center;
+    border: 1px dashed var(--border-color);
+    border-radius: var(--border-radius-md);
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.no-history i {
+    width: 2rem;
+    height: 2rem;
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.history-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    transition: var(--transition-smooth);
+    animation: slide-in 0.25s ease-out;
+}
+
+.history-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(139, 92, 246, 0.3);
+    transform: translateX(2px);
+}
+
+.history-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0; /* flexbox内でのテキスト省略用 */
+    flex-grow: 1;
+}
+
+.history-item-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-main);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.history-item-prompt {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.history-item-meta {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.3);
+    font-family: var(--font-mono);
+}
+
+.history-item-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+.btn-history-load {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: var(--color-secondary);
+}
+
+.btn-history-load:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: var(--color-secondary);
+    color: #60a5fa;
+}
+
+.btn-history-delete {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--status-error);
+}
+
+.btn-history-delete:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: var(--status-error);
+    color: #f87171;
+}
+
+/* 保存用モーダル (モーダル表示時のスタイル) */
+.save-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.save-modal {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--border-radius-lg);
+    width: 90%;
+    max-width: 400px;
+    padding: 1.5rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.save-modal h3 {
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.save-modal input {
+    margin-bottom: 1.25rem;
+}
+
+.save-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}

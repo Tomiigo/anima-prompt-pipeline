@@ -121,6 +121,37 @@
                     </span>
                     <div class="spinner hidden"></div>
                 </button>
+                
+                <button class="btn btn-primary-style" id="btn-save-history" disabled style="margin-top: 0.5rem; width: 100%;">
+                    <i data-lucide="save" class="icon-inline"></i>
+                    現在の結果を履歴に保存
+                </button>
+            </section>
+
+            <!-- 保存履歴カード -->
+            <section class="history-panel card">
+                <div class="card-header">
+                    <div class="header-left">
+                        <i data-lucide="history"></i>
+                        <h2>保存履歴 (History)</h2>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-action" id="btn-export" title="CSVエクスポート">
+                            <i data-lucide="download"></i>
+                        </button>
+                        <button class="btn-action" id="btn-import" title="CSVインポート">
+                            <i data-lucide="upload"></i>
+                        </button>
+                        <input type="file" id="csv-import-file" accept=".csv" class="hidden">
+                    </div>
+                </div>
+                
+                <div class="history-list" id="history-list">
+                    <div class="no-history">
+                        <i data-lucide="folder-open"></i>
+                        <span>保存された履歴はありません。</span>
+                    </div>
+                </div>
             </section>
 
             <!-- Right Column: Outputs -->
