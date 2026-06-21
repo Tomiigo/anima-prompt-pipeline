@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anima Prompt Pipeline</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="stars-bg"></div>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i data-lucide="zap" class="icon-logo"></i>
+                <div class="title-sub">
+                    <h1>Anima Prompt Pipeline</h1>
+                    <p>Japanese to Anima Prompt Generator</p>
+                </div>
+            </div>
+            <div class="status-panel" id="status-panel">
+                <div class="status-item" id="status-gemma">
+                    <span class="status-dot offline"></span>
+                    <span class="status-text">Gemma: Checking...</span>
+                </div>
+                <div class="status-item" id="status-dict">
+                    <span class="status-dot offline"></span>
+                    <span class="status-text">Dictionary: Checking...</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <main class="app-main">
+            <!-- Left Column: Inputs & Settings -->
+            <section class="control-panel card">
+                <div class="card-header">
+                    <i data-lucide="sliders-horizontal"></i>
+                    <h2>プロンプト生成設定</h2>
+                </div>
+
+                <div class="input-group">
+                    <label for="input-prompt">
+                        日本語プロンプト
+                        <span class="tooltip" title="変換したい画像イメージを日本語で入力してください">
+                            <i data-lucide="help-circle"></i>
+                        </span>
+                    </label>
+                    <textarea id="input-prompt" placeholder="例: 茶髪の少女が教室の窓辺に立っている" rows="4"></textarea>
+                    <div class="placeholder-suggestions">
+                        <span class="suggest-chip">茶髪の少女が教室の窓辺に立っている</span>
+                        <span class="suggest-chip">二人の少女が公園のベンチに座っている</span>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label for="input-tags">
+                        追加注入タグ (手動)
+                        <span class="tooltip" title="一般辞書にないキャラ名やアーティストなどをカンマ区切りで指定（例: fern, @kantoku）">
+                            <i data-lucide="help-circle"></i>
+                        </span>
+                    </label>
+                    <input type="text" id="input-tags" placeholder="例: fern, @kantoku">
+                </div>
+
+                <!-- Advanced Settings Accordion -->
+                <div class="settings-accordion">
+                    <button class="accordion-trigger" id="settings-trigger">
+                        <span>
+                            <i data-lucide="settings" class="icon-inline"></i>
+                            詳細設定 (Advanced)
+                        </span>
+                        <i data-lucide="chevron-down" class="arrow-icon"></i>
+                    </button>
+                    
+                    <div class="accordion-content" id="settings-content">
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label for="setting-temp">Temperature (生成度合い)</label>
+                                <div class="range-container">
+                                    <input type="range" id="setting-temp" min="0.0" max="1.0" step="0.05" value="0.4">
+                                    <span class="range-val" id="val-temp">0.4</span>
+                                </div>
+                            </div>
+                            <div class="setting-item">
+                                <label for="setting-max-tokens">Max New Tokens</label>
+                                <input type="number" id="setting-max-tokens" min="256" max="4096" step="128" value="2048">
+                            </div>
+                            <div class="setting-item">
+                                <label for="setting-fuzzy">Fuzzy Snap Cutoff (スナップ類似閾値)</label>
+                                <div class="range-container">
+                                    <input type="range" id="setting-fuzzy" min="50" max="100" step="1" value="90">
+                                    <span class="range-val" id="val-fuzzy">90</span>
+                                </div>
+                            </div>
+                            <div class="setting-item toggle-item">
+                                <label for="setting-translate">
+                                    翻訳ファースト (JP → EN)
+                                </label>
+                                <label class="switch">
+                                    <input type="checkbox" id="setting-translate" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary" id="btn-generate">
+                    <span class="btn-text">
+                        <i data-lucide="play" class="icon-inline"></i>
+                        プロンプトを変換する
+                    </span>
+                    <div class="spinner hidden"></div>
+                </button>
+            </section>
+
+            <!-- Right Column: Outputs -->
+            <section class="result-panel">
+                
+                <!-- System Messages / Warnings -->
+                <div id="system-alert" class="alert-box hidden">
+                    <i data-lucide="alert-triangle" class="alert-icon"></i>
+                    <div class="alert-content">
+                        <h4 id="alert-title">警告</h4>
+                        <p id="alert-message">メッセージ</p>
+                    </div>
+                </div>
+
+                <!-- Result Card: English -->
+                <div class="card output-card">
+                    <div class="card-header">
+                        <div class="header-left">
+                            <i data-lucide="languages"></i>
+                            <h3>English Translation (英訳)</h3>
+                        </div>
+                        <button class="btn btn-copy" data-target="output-english">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="code-area">
+                        <pre><code id="output-english" class="empty">変換を実行するとここに英訳が表示されます...</code></pre>
+                    </div>
+                </div>
+
+                <!-- Result Card: Anima Prompt -->
+                <div class="card output-card highlight-card">
+                    <div class="card-header">
+                        <div class="header-left">
+                            <i data-lucide="sparkles"></i>
+                            <h3>Anima Prompt (プロンプト)</h3>
+                        </div>
+                        <button class="btn btn-copy btn-primary-style" data-target="output-anima">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="code-area">
+                        <pre><code id="output-anima" class="empty">変換を実行するとここにAnimaプロンプトが表示されます...</code></pre>
+                    </div>
+                </div>
+
+                <!-- Result Card: Negative Prompt -->
+                <div class="card output-card">
+                    <div class="card-header">
+                        <div class="header-left">
+                            <i data-lucide="shield-alert"></i>
+                            <h3>Negative Prompt (ネガティブ)</h3>
+                        </div>
+                        <button class="btn btn-copy" data-target="output-negative">
+                            <i data-lucide="copy"></i> Copy
+                        </button>
+                    </div>
+                    <div class="code-area">
+                        <pre><code id="output-negative" class="empty">変換を実行するとここにネガティブプロンプトが表示されます...</code></pre>
+                    </div>
+                </div>
+
+                <!-- Validation Issues Card -->
+                <div class="card output-card hidden" id="card-issues">
+                    <div class="card-header warning-header">
+                        <div class="header-left">
+                            <i data-lucide="check-circle-2" class="issue-icon-success"></i>
+                            <i data-lucide="alert-octagon" class="issue-icon-warning hidden"></i>
+                            <h3 id="issues-title">Validation (検証結果)</h3>
+                        </div>
+                    </div>
+                    <div class="issues-list-container" id="issues-list">
+                        <!-- Issues are populated here -->
+                    </div>
+                </div>
+
+            </section>
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Anima Prompt Pipeline Web App &copy; 2026. Made with Google Antigravity.</p>
+        </footer>
+    </div>
+
+    <!-- Script -->
+    <script src="app.js"></script>
+</body>
+</html>

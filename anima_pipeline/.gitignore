@@ -105,3 +105,5 @@ cython_debug/
 !/data/dict/.gitkeep
 !/data/dict_artist/.gitkeep
 !/data/dict_char/.gitkeep
+
+*.csv

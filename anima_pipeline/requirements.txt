@@ -4,3 +4,6 @@ pyahocorasick>=2.0
 rapidfuzz>=3.0
 rank-bm25>=0.2.2
 pandas>=2.0
+fastapi>=0.100.0
+uvicorn>=0.22.0
+

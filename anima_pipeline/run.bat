@@ -1,0 +1,1 @@
+llama-server -m Huihui-gemma-4-12B-it-qat-q4_0-unquantized-abliterated-Q4_K.gguf --port 8088 -c 8192 -ngl 99 -ot "\.ffn_(up|down|gate)_exps\.=CPU" -fa on --jinja --reasoning-budget 0 -fit on
