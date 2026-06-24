@@ -50,20 +50,21 @@ llama.cpp 本体の入手とビルド(組み立て)は、公式リポジトリ(G
 ### 起動コマンド
 
 下のコマンドをそのまま打てば起動します。パスやファイル名は自分の環境に合わせて変えてください。
+**--fit-target 6144**は、VRAMの空き容量をこれ以下にするな、という引数です。
 
 ```bash
 cd /home/user/llama.cpp
 ./build/bin/llama-server -m models/gemma-4-12B-it-Q4_K_XL.gguf \
   --fit on \
-  -c 8192 \
-  --fit-target 1536 \
-  -b 512 \
+  --fit-target 6144 \
+  -c 4096 \
+  -ctk q8_0 -ctv q8_0 \
+  -b 256 \
   --flash-attn on \
   -t 8 \
   --jinja \
   --chat-template-kwargs '{"enable_thinking":false}' \
-  --host 127.0.0.1 \
-  --port 8080
+  --host 127.0.0.1 --port 8080
 ```
 
 各引数の意味:
