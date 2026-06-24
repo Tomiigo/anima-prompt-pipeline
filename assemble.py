@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """組み立て: 正規化済み中間データ → 最終 Anima プロンプト(Crody's Anima Guide 準拠)。
 
-並び(Crody's Anima Guide のお手本構造):
+並び(Crody's Anima Guide の Segmented Prompt 構造に準拠):
   品質/meta/rating,
-  人数, 単純な相互干渉({CHAR_n}を含まない関係タグ),
-  全キャラの識別子をまとめて列挙(Character / General Concept),
-  各キャラのブロック { 識別子, 容姿, 表情, ポーズ(インライン) } を順に,
-  カメラ, 背景, ライティング,
-  自然文の補助(任意): 位置 と 特定個人への方向性のある相互干渉。
-コメントは出力しない。改行も入れない(Crody)。
+  人数,
+  概念行(Character / General Concept): 自然文で各キャラと髪を with/and で束ねる
+    例 "female with blonde hair and female with black hair",
+  アクション(Pose / Action): シーン全体の動作。概念行と最初のキャラの仕切りを兼ねる,
+  各キャラのブロック { アンカー, 容姿(髪/目), 表情, ポーズ, 服 } を順に(服は末尾),
+  ボディ・リレーション(Interaction / Pose / Body Relationship): 方向性のある相互干渉。
+    CAPTION の {CHAR_n} を短いアンカーへ置換し、キャラの後・シーンの前に置く,
+  カメラ, 背景, ライティング。
+出力は1行・小文字基調・末尾の句点なし(Crody)。コメントは出力しない。
 
-識別子(オリジナルのキャラ): "<服タグ> <female|male|other>"。
-  性別語は人数から: 1girl->female, 1boy->male, 1other->other(子供を若く描く 1girl/1boy の
-  名詞を避け、成人として表す)。`mature female`/`mature male` は female/male と冗長なので落とす。
-  名前付きキャラは BASE の名前をそのまま識別子に使う。
+アンカー(キャラを指す短い識別子): "<1特徴(基本は髪)> <female|male|other>"。
+  概念行・ボディリレーションで共通して使う。フル特徴は各キャラブロックに集約する。
+  性別語は人数から: 1girl->female, 1boy->male, 1other->other。
+  `mature female`/`mature male` は female/male と冗長なので落とす。
+  名前付きキャラは BASE の名前をそのまま使う。
 
 使い方:
   python3 assemble.py --in normalized.txt --out final_prompt.txt
@@ -46,6 +50,7 @@ _COUNT_TOKEN_RE = re.compile(
     r"^(?:\d+(?:girls?|boys?|others?)|multiple (?:girls|boys|others)|solo|duo|trio|group)$")
 _COUNT_PREFIX_RE = re.compile(r"^\s*\d+\s*")
 _CHAR_REF_RE = re.compile(r"\{CHAR_(\d+)\}", re.IGNORECASE)
+_HAIR_RE = re.compile(r"\bhair\b")
 
 
 def parse_blocks(text: str) -> dict:
@@ -87,13 +92,21 @@ def gender_word(base: str) -> str:
     return GENDER_FROM_NOUN.get(noun, noun)  # 名前付きキャラはその名前
 
 
-def char_identity(cb: dict) -> str:
-    """識別子 = "<服タグ> <gender>"。服が無ければ容姿(冗長な成熟タグを除く)、それも無ければ gender。"""
+def char_anchor(cb: dict) -> str:
+    """キャプション(自然文)でキャラを指す短い識別子。特徴を網羅すると Anima を混乱
+    させ、属性がにじむため、最も識別力の高い1要素(基本は髪)+性別だけにする。
+    名前付きキャラは名前をそのまま使う。識別できる appearance が無ければ性別のみ。"""
+    noun = person_noun(cb.get("BASE", ""))
     g = gender_word(cb.get("BASE", ""))
-    desc = tags_of(cb.get("OUTFIT", ""))
-    if not desc:
-        desc = [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
-    return (" ".join(desc) + " " + g) if desc else g
+    if noun not in GENDER_FROM_NOUN:  # 名前付きキャラ
+        return g
+    appearance = [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
+    hair = next((t for t in appearance if _HAIR_RE.search(t)), None)
+    if hair:
+        return f"{hair} {g}"
+    if appearance:
+        return f"{appearance[0]} {g}"
+    return g
 
 
 def dedup(seq: list[str]) -> list[str]:
@@ -106,22 +119,32 @@ def dedup(seq: list[str]) -> list[str]:
     return out
 
 
+def concept_phrase(cb: dict) -> str:
+    """概念行(Character / General Concept)用の自然文の断片。Crody の
+    "<identity> with <hair>" に倣う。識別子=性別(名前付きは名前)、髪があれば with で結ぶ。"""
+    noun = person_noun(cb.get("BASE", ""))
+    g = gender_word(cb.get("BASE", ""))
+    if noun not in GENDER_FROM_NOUN:  # 名前付きキャラ
+        return g
+    appearance = [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
+    hair = next((t for t in appearance if _HAIR_RE.search(t)), None)
+    return f"{g} with {hair}" if hair else g
+
+
 def char_block(cb: dict) -> list[str]:
-    """1キャラ: 識別子, 容姿(冗長な成熟タグ除く), 表情, ポーズ(インライン)。
-    服は識別子に取り込み済みなので特徴には足さない。"""
-    block = [char_identity(cb)]
-    for t in tags_of(cb.get("APPEARANCE", "")):
-        if t not in MATURITY_REDUNDANT:
-            block.append(t)
-    block.extend(tags_of(cb.get("EXPRESSION", "")))
-    block.extend(tags_of(cb.get("POSE", "")))
-    return dedup(block)
-
-
-def capitalize_sentences(text: str) -> str:
-    text = re.sub(r"^(\s*)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
-    text = re.sub(r"([.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), text)
-    return text
+    """1キャラ(Crody順): アンカー → 容姿(髪/目) → 表情 → ポーズ → 服 → アンカー再掲。
+    服はキャラ内の最後に置く(Crody の identity→hair→expression→outfit に対応)。
+    1行に潰すとキャラ境界が消え、前キャラの服が次キャラのアンカーと隣接して混同するため、
+    末尾にそのキャラのアンカーを再掲して境界の緩衝にする(自分の特徴で前後を挟む)。
+    アンカーは短く保ち、フル特徴はこのブロックに集約する。"""
+    anchor = char_anchor(cb)
+    body = dedup(
+        [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
+        + tags_of(cb.get("EXPRESSION", ""))
+        + tags_of(cb.get("POSE", ""))
+        + tags_of(cb.get("OUTFIT", ""))
+    )
+    return [anchor] + body + [anchor]
 
 
 def build(text: str, rating_override: str | None = None) -> str:
@@ -139,47 +162,53 @@ def build(text: str, rating_override: str | None = None) -> str:
     head.append(rating)
     head.extend(tags_of(QUALITY_TAIL))
 
-    # 人数 + 単純な相互干渉({CHAR_n}を含まない関係タグ)
+    # 人数は head に。相互干渉(アクション)は分離して、概念行とキャラの間に挟む。
+    count_tags: list[str] = []
+    action_tags: list[str] = []
     for t in tags_of(blocks.get("INTERACTION", {}).get("COUNT_AND_RELATION", "")):
         if _COUNT_TOKEN_RE.match(t.lower()):
-            head.append(t)
+            count_tags.append(t)
         elif "{" not in t:
-            head.append(t)
+            action_tags.append(t)
+    head.extend(count_tags)
     head = dedup(head)
+    action_tags = dedup(action_tags)
 
-    # 識別子(各キャラ)
-    identities = {cid: char_identity(blocks.get(cid, {})) for cid in char_order}
+    # 各キャラの短いアンカー(1特徴+性別)。ボディ・リレーション(自然文)で使う。
+    anchors = {cid: char_anchor(blocks.get(cid, {})) for cid in char_order}
 
-    # セグメントを順に連結(コメントなし。キャラ間/概念行では重複除去しない=Crodyは再掲する)
-    seg_lists: list[list[str]] = [head]
-    if len(char_order) >= 2:  # Character / General Concept: 全キャラの識別子をまとめて列挙
-        seg_lists.append([identities[cid] for cid in char_order])
-    for cid in char_order:  # 各キャラのブロック(ポーズ同居)
-        seg_lists.append(char_block(blocks.get(cid, {})))
+    # ボディ・リレーション(方向性のある相互干渉)を先に組み立てる。
+    # CAPTION の {CHAR_n} を短いアンカーへ置換。Crody は1行・小文字なので大文字化しない。
+    caption = (blocks.get("NATURAL_LANGUAGE", {}).get("CAPTION", "") or "").strip()
+    relation = ""
+    if caption and caption.lower() != "none" and char_order:
+        def repl(m):
+            return anchors.get(f"CHARACTER_{m.group(1)}", m.group(0))
+        relation = _CHAR_REF_RE.sub(repl, caption).rstrip(" .!?")
 
     scene = blocks.get("SCENE_DETAILS", {})
     scene_tags: list[str] = []
     for f in SCENE_ORDER:
         scene_tags.extend(tags_of(scene.get(f, "")))
     scene_tags = dedup(scene_tags)
+
+    # セグメントを Crody の Segmented 構造順に連結(1行・コメントなし)。
+    # head(品質/meta/rating/人数) → 概念行(自然文 "A with hair and B with hair")
+    #   → アクション(仕切り) → 各キャラブロック(服は末尾) → ボディ・リレーション → シーン。
+    seg_lists: list[list[str]] = [head]
+    if len(char_order) >= 2:  # Character / General Concept: 自然文で各キャラと髪を with で束ねる
+        concept = " and ".join(concept_phrase(blocks.get(cid, {})) for cid in char_order)
+        seg_lists.append([concept])
+    if action_tags:
+        seg_lists.append(action_tags)
+    for cid in char_order:  # 各キャラのブロック(服を末尾に)
+        seg_lists.append(char_block(blocks.get(cid, {})))
+    if relation:  # Interaction / Pose / Body Relationship: キャラの後・シーンの前
+        seg_lists.append([relation])
     if scene_tags:
         seg_lists.append(scene_tags)
 
-    tag_line = ", ".join(", ".join(seg) for seg in seg_lists if seg)
-
-    # 自然文の補助: 位置 + 特定個人への方向性のある相互干渉({CHAR_n}を識別子へ)
-    caption = (blocks.get("NATURAL_LANGUAGE", {}).get("CAPTION", "") or "").strip()
-    if caption and char_order:
-        def repl(m):
-            return identities.get(f"CHARACTER_{m.group(1)}", m.group(0))
-        caption = capitalize_sentences(_CHAR_REF_RE.sub(repl, caption))
-
-    if caption:
-        positive_line = f"{tag_line}. {caption}"
-        if not positive_line.rstrip().endswith((".", "!", "?")):
-            positive_line += "."
-    else:
-        positive_line = tag_line + ","
+    positive_line = ", ".join(", ".join(seg) for seg in seg_lists if seg)
 
     return f"POSITIVE: {positive_line}\nNEGATIVE: {DEFAULT_NEGATIVE},"
 
