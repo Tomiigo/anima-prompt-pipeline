@@ -23,5 +23,5 @@ SOFTWARE.
 ---
 This MIT license applies to the code in this repository only.
 It does NOT cover the Anima model (CircleStone Labs Non-Commercial License) or
-the booru tag data (from HDiffusion / John Steward), which carry their own
-licenses. See NOTICE.md for details.
+the booru tag data (from DeepGHS, https://huggingface.co/datasets/deepghs/site_tags),
+which carry their own licenses. See NOTICE.md for details.

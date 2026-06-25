@@ -1,0 +1,14 @@
+# 利用者ごとに中身が異なる入出力・中間生成物は追跡しない
+inputs/*
+!inputs/README.md
+output.txt
+extracted.txt
+normalized.txt
+unresolved.log
+
+# 各自ビルドする辞書(巨大ファイル)
+booru_dict.json
+
+# Python キャッシュ
+__pycache__/
+*.pyc

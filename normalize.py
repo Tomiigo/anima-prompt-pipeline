@@ -38,7 +38,36 @@ import re
 import sys
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
 SCORE_RE = re.compile(r"^score_\d+$")
+
+
+def load_interaction_map(path: Path | None) -> dict:
+    """相互干渉の写像表(interaction_map.json)を読む。無ければ空(従来動作)。"""
+    if path is None or not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data.get("map", {})
+
+
+def expand_interaction(value: str, imap: dict, notes: list) -> str:
+    """[INTERACTION] COUNT_AND_RELATION 専用: 既知の干渉表現を信頼できる正準タグへ
+    確定変換する。未知トークンは原文のまま通し、後段の別名解決・実在検証に委ねる。
+    変換したものは notes に (元表現, 変換後タグ, 信頼度) を記録する。"""
+    out: list[str] = []
+    for raw in value.split(","):
+        tok = raw.strip()
+        if not tok:
+            continue
+        entry = imap.get(tok.lower())
+        if entry:
+            tags = entry.get("tags", [])
+            conf = entry.get("confidence", "unknown")
+            notes.append((tok, tags, conf))
+            out.extend(tags)
+        else:
+            out.append(tok)
+    return ", ".join(out)
 
 
 def normalize_key(tag: str) -> str:
@@ -97,10 +126,13 @@ def normalize_field(value: str, aliases: dict, canonical: dict, unresolved: list
 _CAPTION_KEYS = {"CAPTION"}
 
 
-def process(text: str, aliases: dict, canonical: dict) -> tuple[str, list]:
-    """構造化ブロックテキストを行単位で処理し、中間データとログを返す。"""
+def process(text: str, aliases: dict, canonical: dict, imap: dict | None = None) -> tuple[str, list, list]:
+    """構造化ブロックテキストを行単位で処理し、中間データ・未解決ログ・干渉ノートを返す。"""
+    imap = imap or {}
     unresolved: list[str] = []
+    interaction_notes: list = []
     out_lines: list[str] = []
+    current_block = ""
     in_caption_block = False
 
     for line in text.splitlines():
@@ -109,7 +141,8 @@ def process(text: str, aliases: dict, canonical: dict) -> tuple[str, list]:
             out_lines.append(line)
             continue
         if stripped.startswith("["):
-            in_caption_block = stripped.strip("[]") == "NATURAL_LANGUAGE"
+            current_block = stripped.strip("[]")
+            in_caption_block = current_block == "NATURAL_LANGUAGE"
             out_lines.append(line)
             continue
         # "- KEY: value" 形式のフィールド行
@@ -121,10 +154,13 @@ def process(text: str, aliases: dict, canonical: dict) -> tuple[str, list]:
         if in_caption_block or key in _CAPTION_KEYS:
             out_lines.append(line)  # CAPTION は触らない
             continue
+        # 相互干渉の写像表は INTERACTION の COUNT_AND_RELATION だけに効かせる
+        if current_block == "INTERACTION" and key == "COUNT_AND_RELATION" and imap:
+            value = expand_interaction(value, imap, interaction_notes)
         new_value = normalize_field(value, aliases, canonical, unresolved)
         out_lines.append(f"{prefix}{key}: {new_value}")
 
-    return "\n".join(out_lines), unresolved
+    return "\n".join(out_lines), unresolved, interaction_notes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -137,6 +173,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="中間データの出力先(省略時は標準出力)")
     p.add_argument("--log", type=Path, default=None,
                    help="実在検証で未解決だったタグのログ(省略時は標準エラー)")
+    p.add_argument("--interaction-map", type=Path, default=HERE / "interaction_map.json",
+                   help="相互干渉の写像表(既定: スクリプトと同じ場所の interaction_map.json)")
     args = p.parse_args(argv)
 
     if not args.dict.exists():
@@ -145,14 +183,31 @@ def main(argv: list[str] | None = None) -> int:
     db = json.loads(args.dict.read_text(encoding="utf-8"))
     aliases = db.get("aliases", {})
     canonical = db.get("canonical", {})
+    imap = load_interaction_map(args.interaction_map)
 
     text = args.infile.read_text(encoding="utf-8") if args.infile else sys.stdin.read()
-    result, unresolved = process(text, aliases, canonical)
+    result, unresolved, interaction_notes = process(text, aliases, canonical, imap)
 
     if args.out:
         args.out.write_text(result, encoding="utf-8")
     else:
         print(result)
+
+    # 相互干渉の写像ノート(変換内容と信頼度)を標準エラーに出す
+    if interaction_notes:
+        print("[相互干渉] 写像表で確定変換:", file=sys.stderr)
+        low = []
+        for src, tags, conf in interaction_notes:
+            print(f"  \"{src}\" -> {', '.join(tags)}  [{conf}]", file=sys.stderr)
+            if conf == "low":
+                low.append(src)
+        if low:
+            print(f"  注意: 低信頼(low)の干渉 {low} は、画像生成で意図通り出ない可能性があります。",
+                  file=sys.stderr)
+    elif imap:
+        print("[相互干渉] 写像表に該当する干渉表現はありませんでした。", file=sys.stderr)
+    else:
+        print("[相互干渉] 写像表が読み込めず(無効)、干渉変換はスキップしました。", file=sys.stderr)
 
     # 未解決タグのログ(重複と回数を集計)
     from collections import Counter

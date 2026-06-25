@@ -132,19 +132,15 @@ def concept_phrase(cb: dict) -> str:
 
 
 def char_block(cb: dict) -> list[str]:
-    """1キャラ(Crody順): アンカー → 容姿(髪/目) → 表情 → ポーズ → 服 → アンカー再掲。
+    """1キャラ(Crody順): アンカー → 容姿(髪/目) → 表情 → ポーズ → 服。
     服はキャラ内の最後に置く(Crody の identity→hair→expression→outfit に対応)。
-    1行に潰すとキャラ境界が消え、前キャラの服が次キャラのアンカーと隣接して混同するため、
-    末尾にそのキャラのアンカーを再掲して境界の緩衝にする(自分の特徴で前後を挟む)。
     アンカーは短く保ち、フル特徴はこのブロックに集約する。"""
-    anchor = char_anchor(cb)
-    body = dedup(
-        [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
-        + tags_of(cb.get("EXPRESSION", ""))
-        + tags_of(cb.get("POSE", ""))
-        + tags_of(cb.get("OUTFIT", ""))
-    )
-    return [anchor] + body + [anchor]
+    block = [char_anchor(cb)]
+    block.extend(t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT)
+    block.extend(tags_of(cb.get("EXPRESSION", "")))
+    block.extend(tags_of(cb.get("POSE", "")))
+    block.extend(tags_of(cb.get("OUTFIT", "")))
+    return dedup(block)
 
 
 def build(text: str, rating_override: str | None = None) -> str:
