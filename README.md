@@ -22,6 +22,8 @@
 ②と③は **Python の標準ライブラリだけ** で動きます(追加インストール不要)。
 ①だけ、文章を読む頭脳として **ローカル LLM(Gemma-4)** を llama.cpp で動かします。
 
+> 画像を読み込ませて同じ構造化ブロックを作る派生パイプラインは、[docs/image_pipeline.md](docs/image_pipeline.md) を参照してください。Qwen-3.6-27B と対応する `mmproj` を使います。
+
 ---
 
 ## 必要なもの
@@ -125,6 +127,11 @@ python3 run_pipeline.py --from-extracted extracted.txt \
 | `interaction_map.json` | ② 相互干渉の写像表 |
 | `assemble.py` | ③ 最終プロンプトの組み立て(標準ライブラリのみ) |
 | `system_prompt.txt` | ① 抽出用のシステムプロンプト |
+| `run_image_pipeline.py` | 画像解析(Qwen) → 正規化 → 組み立て の配線役 |
+| `anima_image_pipeline_oneshot.sh` | `--mmproj` 付き llama-server の起動・画像パイプライン実行・停止 |
+| `image_system_prompt.txt` | 画像解釈用のシステムプロンプト |
+| `image_inputs/` | 読み込ませる画像を1枚置く場所([説明](image_inputs/README.md)) |
+| `docs/image_pipeline.md` | Qwen + mmproj を使う画像パイプラインの手順 |
 | `inputs/` | 変換したい文章を置く場所(1ファイル。[inputs/README.md](inputs/README.md)) |
 | `tools/build_booru_dict.py` | `booru_dict.json` を CSV から作るスクリプト([docs/dictionary.md](docs/dictionary.md)) |
 | `docs/llama_cpp_setup.md` | llama.cpp の導入・起動・VRAM 配分・トラブル対処 |
@@ -132,21 +139,20 @@ python3 run_pipeline.py --from-extracted extracted.txt \
 
 ---
 
-## カスタマイズと自己責任について
+## カスタマイズと免責事項について
 
 このツールは、**rating を `safe` 以外(`sensitive` / `nsfw` / `explicit`)にも指定できます。** また、①で使う LLM(Gemma の版を含む)を何にするかは、すべて利用者が自分で選びます。
-
-はっきり書いておきます。
 
 - 作者も、この README の作成を手伝った AI も、**無規制版モデルの使用や、プロンプトから `safe` を外すことを、推奨したり誘導したりはしません。** そのためのやり方も説明しません。
 - ですが、そうしたカスタマイズを **技術的に不可能にもしていません。**
 
-だから、その先は **完全に自己責任** です。出力した画像で何が起きても、それはあなたが選んだ結果であって、ツールや作者が肩代わりするものではありません。**お住まいの地域の法律と、画像を投稿・利用する各プラットフォームの規約を、必ず自分で守ってください。**
+**お住まいの地域の法律と、画像を投稿・利用する各プラットフォームの規約を、必ず自分で守ってください。**
 
 ---
 
 ## 謝辞・出典
 
 - タグの並び順や記法は、Crody 氏の Anima 画像生成ガイドを主な参考にしています。
+- 検証にあたっては、dskjal 氏が Web上で公開されている Anima に関する知見に頼っています。
 - `booru_dict.json` の元データ(Danbooru / Gelbooru のタグ・別名 CSV)は、**DeepGHS** さんが公開しているデータセット <https://huggingface.co/datasets/deepghs/site_tags> から取得しました。整備・公開に感謝します。
 - 元データの利用条件は、上記データセットおよび Danbooru / Gelbooru 各サイトの規約に従ってください。
