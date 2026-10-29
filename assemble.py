@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
-"""組み立て: 正規化済み中間データ → 最終 Anima プロンプト(Crody's Anima Guide 準拠)。
+"""組み立て: 正規化済み中間データ → 最終 Anima プロンプト。
 
-並び(Crody's Anima Guide の Segmented Prompt 構造に準拠):
-  品質/meta/rating,
+並び(Anima 公式モデルカードのタグ順 + Crody の Segmented Prompt):
+  品質/meta/年/rating,
   人数,
-  概念行(Character / General Concept): 自然文で各キャラと髪を with/and で束ねる
+  版権キャラ, 作品                     ← 公式カードの [character] [series]
+  概念行(2人以上): 各キャラと髪を with/and で束ねる
     例 "female with blonde hair and female with black hair",
   アクション(Pose / Action): シーン全体の動作。概念行と最初のキャラの仕切りを兼ねる,
-  各キャラのブロック { アンカー, 容姿(髪/目), 表情, ポーズ, 服 } を順に(服は末尾),
-  ボディ・リレーション(Interaction / Pose / Body Relationship): 方向性のある相互干渉。
-    CAPTION の {CHAR_n} を短いアンカーへ置換し、キャラの後・シーンの前に置く,
-  カメラ, 背景, ライティング。
+  各キャラのブロック { 識別子, 身体, 髪, 目, 表情, 装身具, 服, ポーズ },
+  シーン(カメラ → 光 → 背景),
+  自然文(位置・方向のある相互干渉)。最後に置く。
 出力は1行・小文字基調・末尾の句点なし(Crody)。コメントは出力しない。
+タグの括弧は \\( \\) にする(ComfyUI は括弧を重み付けの記法として読むため)。
+アーティストのタグは扱わない。
 
-アンカー(キャラを指す短い識別子): "<1特徴(基本は髪)> <female|male|other>"。
-  概念行・ボディリレーションで共通して使う。フル特徴は各キャラブロックに集約する。
+アンカー(自然文で登場人物を指す識別子):
+  名前を持たない登場人物は
+    女性     髪+髪の色 / 肌の色 / 体型 / 性別
+    男性     肌の色 / 体型 / 性別
+    ロボット 表面の色 / 体型 / robot
+  で構成する。版権キャラは名前ひとつで表し、外見のタグは用いない。
   性別語は人数から: 1girl->female, 1boy->male, 1other->other。
-  `mature female`/`mature male` は female/male と冗長なので落とす。
-  名前付きキャラは BASE の名前をそのまま使う。
+  性別や年齢を含む容姿の語(mature female, young adult male など)は、性別語と重なるので落とす。
 
 使い方:
   python3 assemble.py --in normalized.txt --out final_prompt.txt
@@ -40,17 +45,106 @@ DEFAULT_NEGATIVE = ("worst quality, low quality, early, old, score_1, score_2, s
                     "cropped, very displeasing, artist name, blurry, jpeg artifacts, "
                     "lowres, censor")
 VALID_RATINGS = {"safe", "sensitive", "nsfw", "explicit"}
+NONE_VALUES = {"none", "none visible", "not visible", "n/a", "na", "unknown", "unspecified",
+               "nothing", "no outfit", "not applicable"}
 
-# 各キャラブロックの並び。ポーズはインライン(同居)。容姿のうち下記は female/male と冗長で落とす。
-MATURITY_REDUNDANT = {"mature female", "mature male"}
+# 性別や成人を表す容姿の語。キャラの識別子(female / male)と重なるので落とす。
+# 旧版は mature female / mature male だけを落としており、young adult male などが残って
+# アンカーが "young adult male male" になっていた。
+GENDER_REDUNDANT = {
+    "female", "male", "other", "woman", "man", "girl", "boy", "adult", "young adult",
+    "mature female", "mature male", "adult female", "adult male",
+    "young adult female", "young adult male", "young woman", "young man",
+}
+
+# 人数タグ(1girl 等)を人物側の語へ落とす。
+#   Anima は booru タグで学習されており、成人の女性と男性が1人ずつ描かれた絵でも
+#   "1girl, 1boy" とタグ付けされている。人数タグは成人を指す語にならない。
+#   登場人物をタグの羅列で構成するときと自然文では、成人女性は female、成人男性は male。
+#   人数タグ自体は head に1度だけ置き、人物ごとには繰り返さない。
 GENDER_FROM_NOUN = {"girl": "female", "boy": "male", "other": "other"}
-SCENE_ORDER = ["CAMERA", "BACKGROUND", "LIGHTING_AND_EFFECTS"]
+
+# シーンの並び。Crody の記事 §3「Segmented Prompt」の実物に合わせる。背景は光より後。
+SCENE_ORDER = ["CAMERA", "LIGHTING_AND_EFFECTS", "BACKGROUND"]
+
+# ---- Crody §3 のキャラ内スロットへ振り分けるための判定 -------------------------
+# 「髪」「目」「上衣」のような細分類はどのデータにも無いため、語形の規則で判定する。
+_NOT_HAIR_RE = re.compile(
+    r"(^|[ _])(hair ornaments?|hairbands?|hair bands?|hairclips?|hair clips?|hair bows?|"
+    r"hair ribbons?|hair flowers?|hairpins?|hair pins?|hair bobbles|hair tubes|hair rings|"
+    r"hair ties?|hair scrunchies?|hair beads|hair sticks?)$")
+
+# 髪型の語。"hair" を含まないので拾えないが、Crody §3 では [Appearance / Hair] に属する。
+_HAIRSTYLE_RE = re.compile(
+    r"^(twintails?|ponytail|twin braids|braids?|bangs|blunt bangs|choppy bangs|swept bangs|"
+    r"sidelocks|long sidelocks|ahoge|bob cut|hime cut|updo|bun|double bun|side bun|"
+    r"drill hair|ringlets|afro|dreadlocks|messy|curly|wavy|straight)$|"
+    r"(bangs|sidelocks|braid|braids|ponytail|twintails|bun|buns)$")
+_NOT_EYE_RE = re.compile(
+    r"(^|[ _])(eyewear|eyepatch|eyeliner|eyeshadow|eyelashes|eyebrow|eyebrows|"
+    r"eye mask|eye black|eyewear strap)$|eyebrows$|eyewear$")
+# 目に見えるが表情・視線であって容姿の目ではないもの。表情へ送る。
+_EYE_IS_EXPRESSION_RE = re.compile(
+    r"^(one eye closed|eyes closed|closed eyes|wide-eyed|one-eyed|one eye covered|"
+    r"eyes opened|half-closed eyes|narrowed eyes|rolling eyes)$")
+_SKIN_RE = re.compile(r"(^|[ _])(skin|skinned female|skinned male)$|^(tan|pale|dark-skinned.*)$")
+_BODY_RE = re.compile(
+    r"^(slim|slender|thin|petite|curvy|voluptuous|muscular|muscle|toned|plump|chubby|"
+    r"fat|athletic|lanky|tall|short|wide hips|narrow waist)\b|"
+    r"\b(muscular|slim|curvy|petite|toned|athletic|mature) (torso|body|build|figure)$")
 
 _COUNT_TOKEN_RE = re.compile(
     r"^(?:\d+(?:girls?|boys?|others?)|multiple (?:girls|boys|others)|solo|duo|trio|group)$")
 _COUNT_PREFIX_RE = re.compile(r"^\s*\d+\s*")
 _CHAR_REF_RE = re.compile(r"\{CHAR_(\d+)\}", re.IGNORECASE)
-_HAIR_RE = re.compile(r"\bhair\b")
+_UNESCAPED_PAREN_RE = re.compile(r"(?<!\\)([()])")
+
+
+def _is_hair(t: str) -> bool:
+    if _NOT_HAIR_RE.search(t):
+        return False
+    return "hair" in t or bool(_HAIRSTYLE_RE.search(t))
+
+
+def _is_eye(t: str) -> bool:
+    return ("eye" in t or "pupil" in t) and not _NOT_EYE_RE.search(t) \
+        and not _EYE_IS_EXPRESSION_RE.match(t) and not _is_hair(t)
+
+
+def _is_accessory_from_appearance(t: str) -> bool:
+    """APPEARANCE に来たが、Crody §3 では装身具に属する語(髪飾り・アイウェアなど)。"""
+    return bool(_NOT_HAIR_RE.search(t) or _NOT_EYE_RE.search(t))
+
+
+def split_appearance(tags: list[str]) -> dict:
+    """APPEARANCE を Crody §3 のスロットへ割る。その他(肌・耳・角・翼など) → 髪 → 目 の順。"""
+    out = {"other": [], "hair": [], "eyes": [], "accessory": [], "expression": []}
+    for t in tags:
+        if _is_accessory_from_appearance(t):
+            out["accessory"].append(t)
+        elif _is_hair(t):
+            out["hair"].append(t)
+        elif _EYE_IS_EXPRESSION_RE.match(t):
+            out["expression"].append(t)
+        elif _is_eye(t):
+            out["eyes"].append(t)
+        else:
+            out["other"].append(t)
+    return out
+
+
+def merge_hair(hair_tags: list[str]) -> str | None:
+    """アンカー用に髪を1語へまとめる。"long hair" + "blonde hair" -> "long blonde hair"。
+    末尾が hair の語だけをまとめ、twintails 等の型は触らない。"""
+    mods: list[str] = []
+    for t in hair_tags:
+        if t.endswith("hair"):
+            m = t[: -len("hair")].strip()
+            if m and m not in mods:
+                mods.append(m)
+    if not mods:
+        return hair_tags[0] if hair_tags else None
+    return " ".join(mods) + " hair"
 
 
 def parse_blocks(text: str) -> dict:
@@ -74,9 +168,10 @@ def parse_blocks(text: str) -> dict:
 
 
 def tags_of(value: str) -> list[str]:
-    if not value or value.strip().lower() == "none":
+    if not value or value.strip().lower() in NONE_VALUES:
         return []
-    return [t.strip() for t in value.split(",") if t.strip()]
+    return [t.strip() for t in value.split(",")
+            if t.strip() and t.strip().lower() not in NONE_VALUES]
 
 
 def person_noun(base: str) -> str:
@@ -89,24 +184,49 @@ def person_noun(base: str) -> str:
 
 def gender_word(base: str) -> str:
     noun = person_noun(base)
-    return GENDER_FROM_NOUN.get(noun, noun)  # 名前付きキャラはその名前
+    return GENDER_FROM_NOUN.get(noun, noun)  # 版権キャラはその名前
 
 
-def char_anchor(cb: dict) -> str:
-    """キャプション(自然文)でキャラを指す短い識別子。特徴を網羅すると Anima を混乱
-    させ、属性がにじむため、最も識別力の高い1要素(基本は髪)+性別だけにする。
-    名前付きキャラは名前をそのまま使う。識別できる appearance が無ければ性別のみ。"""
-    noun = person_noun(cb.get("BASE", ""))
+def is_named(cb: dict) -> bool:
+    return person_noun(cb.get("BASE", "")) not in GENDER_FROM_NOUN
+
+
+def appearance_tags(cb: dict) -> list[str]:
+    return [t for t in tags_of(cb.get("APPEARANCE", "")) if t.lower() not in GENDER_REDUNDANT]
+
+
+def char_anchor(cb: dict, inline: bool = False) -> str:
+    """自然文(概念行・自然文の補足)で登場人物を指す識別子。
+
+    名前を持たない登場人物は、女性は「髪+髪の色 / 肌の色 / 体型 / 性別」、男性は
+    「肌の色 / 体型 / 性別」、ロボット等は「表面の色 / 体型 / robot」で構成する。
+    版権キャラは名前ひとつで表し、外見のタグは用いない。
+    inline=True は文の中に差し込むとき。要素をスペースで繋ぐ(カンマだと文が割れる)。
+    """
     g = gender_word(cb.get("BASE", ""))
-    if noun not in GENDER_FROM_NOUN:  # 名前付きキャラ
+    if is_named(cb):
         return g
-    appearance = [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
-    hair = next((t for t in appearance if _HAIR_RE.search(t)), None)
-    if hair:
-        return f"{hair} {g}"
-    if appearance:
-        return f"{appearance[0]} {g}"
-    return g
+
+    parts = split_appearance(appearance_tags(cb))
+    skin = next((t for t in parts["other"] if _SKIN_RE.search(t)), None)
+    body = next((t for t in parts["other"] if _BODY_RE.match(t)), None)
+
+    out: list[str] = []
+    if g == "female":                      # 女性のみ髪を含める
+        hair = merge_hair(parts["hair"])
+        if hair:
+            out.append(hair)
+    elif g == "other":                     # ロボット等: 表面の色を髪の位置に置く
+        surface = next((t for t in parts["other"]
+                        if t not in (skin, body) and "color" in t), None)
+        if surface:
+            out.append(surface)
+    if skin:
+        out.append(skin)
+    if body:
+        out.append(body)
+    out.append(g)
+    return (" " if inline else ", ").join(out)
 
 
 def dedup(seq: list[str]) -> list[str]:
@@ -120,32 +240,48 @@ def dedup(seq: list[str]) -> list[str]:
 
 
 def concept_phrase(cb: dict) -> str:
-    """概念行(Character / General Concept)用の自然文の断片。Crody の
-    "<identity> with <hair>" に倣う。識別子=性別(名前付きは名前)、髪があれば with で結ぶ。"""
-    noun = person_noun(cb.get("BASE", ""))
+    """概念行用の自然文の断片。識別子を with で髪に結ぶ。版権キャラは名前のみ。"""
     g = gender_word(cb.get("BASE", ""))
-    if noun not in GENDER_FROM_NOUN:  # 名前付きキャラ
+    if is_named(cb):
         return g
-    appearance = [t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT]
-    hair = next((t for t in appearance if _HAIR_RE.search(t)), None)
+    hair = merge_hair(split_appearance(appearance_tags(cb))["hair"])
     return f"{g} with {hair}" if hair else g
 
 
-def char_block(cb: dict) -> list[str]:
-    """1キャラ(Crody順): アンカー → 容姿(髪/目) → 表情 → ポーズ → 服。
-    服はキャラ内の最後に置く(Crody の identity→hair→expression→outfit に対応)。
-    アンカーは短く保ち、フル特徴はこのブロックに集約する。"""
-    block = [char_anchor(cb)]
-    block.extend(t for t in tags_of(cb.get("APPEARANCE", "")) if t not in MATURITY_REDUNDANT)
+def char_block(cb: dict, multi: bool) -> list[str]:
+    """1キャラのタグ列(Crody §3 の Segmented Prompt の実物の順)。
+
+      識別子 → 身体の特徴(肌・耳・角・halo・翼) → 髪 → 目 → 表情・視線
+      → 装身具 → 服 → ポーズ
+
+    版権キャラの名前は head(人数の直後)に置くので、1人のときは繰り返さない。
+    2人以上のときは、どの特徴が誰のものかを結び付けるために名前で始める。
+    """
+    parts = split_appearance(appearance_tags(cb))
+    block: list[str] = []
+    if not is_named(cb) or multi:
+        block.append(gender_word(cb.get("BASE", "")))
+    block.extend(parts["other"])
+    block.extend(parts["hair"])
+    block.extend(parts["eyes"])
+    block.extend(parts["expression"])          # APPEARANCE に紛れた表情語
     block.extend(tags_of(cb.get("EXPRESSION", "")))
-    block.extend(tags_of(cb.get("POSE", "")))
+    block.extend(parts["accessory"])           # APPEARANCE から動かした装身具
     block.extend(tags_of(cb.get("OUTFIT", "")))
+    block.extend(tags_of(cb.get("POSE", "")))
     return dedup(block)
+
+
+def escape_parens(s: str) -> str:
+    """ComfyUI は ( ) を重み付けの記法として読むので、タグの括弧を \\( \\) にする。
+    例 fern (sousou no frieren) -> fern \\(sousou no frieren\\)"""
+    return _UNESCAPED_PAREN_RE.sub(r"\\\1", s)
 
 
 def build(text: str, rating_override: str | None = None) -> str:
     parsed = parse_blocks(text)
     blocks, char_order = parsed["blocks"], parsed["char_order"]
+    multi = len(char_order) >= 2
 
     # 品質 + rating(score直後) + era/meta
     head = tags_of(QUALITY_HEAD)
@@ -167,17 +303,21 @@ def build(text: str, rating_override: str | None = None) -> str:
         elif "{" not in t:
             action_tags.append(t)
     head.extend(count_tags)
+
+    # 公式カードの順: 人数 → 版権キャラ → 作品。
+    named = [blocks.get(cid, {}) for cid in char_order if is_named(blocks.get(cid, {}))]
+    head.extend(gender_word(cb.get("BASE", "")) for cb in named)
+    for cb in named:
+        head.extend(tags_of(cb.get("SERIES", "")))
     head = dedup(head)
     action_tags = dedup(action_tags)
 
-    # 各キャラの短いアンカー(1特徴+性別)。ボディ・リレーション(自然文)で使う。
-    anchors = {cid: char_anchor(blocks.get(cid, {})) for cid in char_order}
+    anchors = {cid: char_anchor(blocks.get(cid, {}), inline=True) for cid in char_order}
 
-    # ボディ・リレーション(方向性のある相互干渉)を先に組み立てる。
-    # CAPTION の {CHAR_n} を短いアンカーへ置換。Crody は1行・小文字なので大文字化しない。
+    # 自然文の補足(位置・方向のある相互干渉)。CAPTION の {CHAR_n} をアンカーへ置換する。
     caption = (blocks.get("NATURAL_LANGUAGE", {}).get("CAPTION", "") or "").strip()
     relation = ""
-    if caption and caption.lower() != "none" and char_order:
+    if caption and caption.lower() not in NONE_VALUES and char_order:
         def repl(m):
             return anchors.get(f"CHARACTER_{m.group(1)}", m.group(0))
         relation = _CHAR_REF_RE.sub(repl, caption).rstrip(" .!?")
@@ -188,25 +328,25 @@ def build(text: str, rating_override: str | None = None) -> str:
         scene_tags.extend(tags_of(scene.get(f, "")))
     scene_tags = dedup(scene_tags)
 
-    # セグメントを Crody の Segmented 構造順に連結(1行・コメントなし)。
-    # head(品質/meta/rating/人数) → 概念行(自然文 "A with hair and B with hair")
-    #   → アクション(仕切り) → 各キャラブロック(服は末尾) → ボディ・リレーション → シーン。
     seg_lists: list[list[str]] = [head]
-    if len(char_order) >= 2:  # Character / General Concept: 自然文で各キャラと髪を with で束ねる
+    # 概念行: 自然文で各キャラと髪を with で束ねる。全員が版権キャラなら、名前は head に
+    # 並んでいるので繰り返さない。
+    if multi and len(named) < len(char_order):
         concept = " and ".join(concept_phrase(blocks.get(cid, {})) for cid in char_order)
         seg_lists.append([concept])
     if action_tags:
         seg_lists.append(action_tags)
-    for cid in char_order:  # 各キャラのブロック(服を末尾に)
-        seg_lists.append(char_block(blocks.get(cid, {})))
-    if relation:  # Interaction / Pose / Body Relationship: キャラの後・シーンの前
-        seg_lists.append([relation])
+    for cid in char_order:
+        seg_lists.append(char_block(blocks.get(cid, {}), multi))
     if scene_tags:
         seg_lists.append(scene_tags)
+    if relation:
+        # 自然文はタグ列の最後。dskjal の検証記事:「位置が関係ないタグはプロンプトの頭に
+        # 列挙し、位置が重要なタグは自然言語で書く」。
+        seg_lists.append([relation])
 
     positive_line = ", ".join(", ".join(seg) for seg in seg_lists if seg)
-
-    return f"POSITIVE: {positive_line}\nNEGATIVE: {DEFAULT_NEGATIVE},"
+    return f"POSITIVE: {escape_parens(positive_line)}\nNEGATIVE: {DEFAULT_NEGATIVE},"
 
 
 def main(argv: list[str] | None = None) -> int:

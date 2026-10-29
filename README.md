@@ -12,7 +12,8 @@
       ▼  ① 抽出      ローカルの Gemma-4(llama.cpp サーバー)が
       │              文章を読み、構造化ブロックに分解する
       ▼  ② 正規化    辞書(booru_dict.json)で、表記ゆれを正しい
-      │              Danbooru タグに直し、存在しないタグを記録する
+      │              Danbooru タグに直し、版権キャラの特徴を補い、
+      │              存在しないタグを記録する(近い実在タグを候補として出す)
       ▼  ③ 組み立て  決まった並び順で最終プロンプトを組み立てる
       │
       ▼
@@ -22,15 +23,13 @@
 ②と③は **Python の標準ライブラリだけ** で動きます(追加インストール不要)。
 ①だけ、文章を読む頭脳として **ローカル LLM(Gemma-4)** を llama.cpp で動かします。
 
-> 画像を読み込ませて同じ構造化ブロックを作る派生パイプラインは、[docs/image_pipeline.md](docs/image_pipeline.md) を参照してください。Qwen-3.6-27B と対応する `mmproj` を使います。
-
 ---
 
 ## 必要なもの
 
 1. **Python 3**(3.9 以降くらい。標準ライブラリのみ使用)
 2. **llama.cpp** と、その上で動かす **Gemma-4 の gguf モデル**(①で使う) → 導入は [docs/llama_cpp_setup.md](docs/llama_cpp_setup.md)
-3. **booru_dict.json**(②で使う辞書)。**このリポジトリには同梱していません。** 作り方は [docs/dictionary.md](docs/dictionary.md)(ビルダー `tools/build_booru_dict.py` を同梱)
+3. **booru_dict.json**(②で使う辞書)。**このリポジトリには同梱していません。** 作り方は [docs/dictionary.md](docs/dictionary.md)(ビルダー `tools/build_booru_dict.py` を同梱)。以前のビルダーで作った辞書は形式が違うので、作り直してください。
 4. **`curl`**(クイックスタートのスクリプトが使用。Ubuntu なら `sudo apt install curl`)
 
 ---
@@ -93,9 +92,20 @@ python3 run_pipeline.py --from-extracted extracted.txt \
 | `output.txt` | 最終プロンプト(これを画像生成に貼る) |
 | `extracted.txt` | ① Gemma が出した構造化ブロック(中間) |
 | `normalized.txt` | ② 辞書で正規化した中間データ |
-| `unresolved.log` | ② 辞書(canonical)に無かったタグの一覧。削除はせず記録だけする |
+| `unresolved.log` | ② の記録。辞書に無かったタグ(削除はせず、綴りの近い実在タグを候補として併記)、自動で置き換えたタグ、低頻度のタグ、版権キャラの特徴で補ったタグ |
 
-`unresolved.log` に大量にタグが出ているときは、辞書に無い綴り or 存在しないタグを Gemma が作った可能性があります。確認の手がかりにしてください。
+`unresolved.log` の未解決に大量にタグが出ているときは、辞書に無い綴り or 存在しないタグを Gemma が作った可能性があります。候補を見て、よく出る言い回しは `tag_synonyms.json` に1行足すと、次から自動で置き換わります。
+
+---
+
+## ②正規化がすること
+
+- **表記ゆれを直す**: 辞書の別名表(例 `tanned skin` → `tan`)、同義語表 `tag_synonyms.json`(例 `high angle` → `from above`)、ハイフン・複数形・語順の違いを、実在するタグへ置き換えます。綴りが近いだけのタグは意味が違うことがあるので、自動では置き換えず候補としてログに出します。
+- **版権キャラを正規のタグにする**: `BASE` に書かれた名前を、正規のキャラタグに直します(例 `fern, sousou no frieren` → `fern (sousou no frieren)`)。同名のキャラが複数いるときは、添えられた作品名、無ければ投稿数の多いほうを選び、ほかの候補をログに残します。作品タグも自動で付けます。
+- **版権キャラの既定の特徴を補う**: 文章が髪・目に触れていなければ、そのキャラの髪・目を補います。耳・角・尻尾などの身体の特徴は、無いものを足します。**服は、文章が服に触れていないときだけ補います**(服のタグが無いと Anima は服を描かないため)。文章が服を指定していれば、そちらを使います。
+- **アーティストのタグは扱いません**: 辞書にも、①のシステムプロンプトにも含めない設計です。
+
+最終プロンプトでは、タグの括弧を `\(` `\)` にしています(例 `fern \(sousou no frieren\)`)。ComfyUI は括弧を重み付けの記法として読むためです。
 
 > 入力ファイル・`output.txt`・上記の中間ファイルは、利用者ごとに中身が異なるため Git 追跡対象外(`.gitignore` 済み)です。
 
@@ -125,17 +135,14 @@ python3 run_pipeline.py --from-extracted extracted.txt \
 | `run_pipeline.py` | 3段を自動でつなぐ配線役(標準ライブラリのみ) |
 | `normalize.py` | ② 正規化+実在検証(標準ライブラリのみ) |
 | `interaction_map.json` | ② 相互干渉の写像表 |
+| `tag_synonyms.json` | ② 同義語表(辞書に無い言い回し → 実在タグ) |
 | `assemble.py` | ③ 最終プロンプトの組み立て(標準ライブラリのみ) |
 | `system_prompt.txt` | ① 抽出用のシステムプロンプト |
-| `run_image_pipeline.py` | 画像解析(Qwen) → 正規化 → 組み立て の配線役 |
-| `anima_image_pipeline_oneshot.sh` | `--mmproj` 付き llama-server の起動・画像パイプライン実行・停止 |
-| `image_system_prompt.txt` | 画像解釈用のシステムプロンプト |
-| `image_inputs/` | 読み込ませる画像を1枚置く場所([説明](image_inputs/README.md)) |
-| `docs/image_pipeline.md` | Qwen + mmproj を使う画像パイプラインの手順 |
 | `inputs/` | 変換したい文章を置く場所(1ファイル。[inputs/README.md](inputs/README.md)) |
 | `tools/build_booru_dict.py` | `booru_dict.json` を CSV から作るスクリプト([docs/dictionary.md](docs/dictionary.md)) |
 | `docs/llama_cpp_setup.md` | llama.cpp の導入・起動・VRAM 配分・トラブル対処 |
 | `docs/dictionary.md` | 辞書の作り方(CSV 取得・ビルド・構造) |
+| `tests/test_pipeline.py` | ②③の回帰テスト(`python3 -m unittest discover tests`。辞書は不要) |
 
 ---
 
@@ -154,5 +161,6 @@ python3 run_pipeline.py --from-extracted extracted.txt \
 
 - タグの並び順や記法は、Crody 氏の Anima 画像生成ガイドを主な参考にしています。
 - 検証にあたっては、dskjal 氏が Web上で公開されている Anima に関する知見に頼っています。
-- `booru_dict.json` の元データ(Danbooru / Gelbooru のタグ・別名 CSV)は、**DeepGHS** さんが公開しているデータセット <https://huggingface.co/datasets/deepghs/site_tags> から取得しました。整備・公開に感謝します。
+- `booru_dict.json` の元データ(Danbooru / Gelbooru のタグ・別名 CSV)は、**DeepGHS** さんが公開しているデータセット <https://huggingface.co/datasets/deepghs/site_tags> から取得しました。版権キャラの既定の特徴は、**Minthy** さんの <https://huggingface.co/datasets/Minthy/BooruCharacters_v0.5> と、**newtextdoc1111** さんの <https://huggingface.co/datasets/newtextdoc1111/danbooru-tag-csv> の共起表から作ります。整備・公開に感謝します。
+- タグの順(品質 → 人数 → キャラ → 作品 → 一般タグ)は、Anima の公式モデルカード <https://huggingface.co/circlestone-labs/Anima> に従っています。
 - 元データの利用条件は、上記データセットおよび Danbooru / Gelbooru 各サイトの規約に従ってください。
