@@ -17,7 +17,10 @@
 - 辞書の元になるタグ・別名データは、**DeepGHS** さんが Hugging Face で公開している
   データセットに由来します。
   - https://huggingface.co/datasets/deepghs/site_tags
-- 本リポジトリはこのデータ(CSV)も、そこから生成した辞書も **同梱していません**。
+- 版権キャラの既定の特徴は、次のデータセットから作ります(任意)。
+  - **Minthy** さんの BooruCharacters(MIT): https://huggingface.co/datasets/Minthy/BooruCharacters_v0.5
+  - **newtextdoc1111** さんの Danbooru タグの共起表(MIT): https://huggingface.co/datasets/newtextdoc1111/danbooru-tag-csv
+- 本リポジトリはこれらのデータも、そこから生成した辞書も **同梱していません**。
   各自で上記から取得し、ローカルでビルドしてください。データセットのライセンス・利用条件は
   配布元の記載に従ってください。
 
